@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Elm with Auth0</title>
+    <script src="Main.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+  </head>
+  <body>
+    <div id="elm-app"></div>
+  </body>
+  <script src="https://cdn.auth0.com/js/auth0/9.0.0/auth0.min.js"></script>
+  <script>
+    var webAuth = new auth0.WebAuth({
+      domain: '', // e.g., you.auth0.com
+      clientID: '',
+      scope: 'openid email',
+      responseType: 'token',
+      redirectUri: 'http://localhost:8000/index.html'
+    });
+    var storedProfile = localStorage.getItem('profile');
+    var storedToken = localStorage.getItem('token');
+    var authData = storedProfile && storedToken ? { profile: JSON.parse(storedProfile), token: storedToken } : null;
+    var elmApp = Elm.Main.init({
+      flags: authData,
+      node: document.getElementById('elm-app')
+    });
+    // Auth0 authorize subscription
+    elmApp.ports.auth0authorize.subscribe(function(opts) {
+      webAuth.authorize();
+    });
+    // Log out of Auth0 subscription
+    elmApp.ports.auth0logout.subscribe(function(opts) {
+      localStorage.removeItem('profile');
+      localStorage.removeItem('token');
+    });
+    // Watching for hash after redirect
+    webAuth.parseHash({ hash: window.location.hash }, function(err, authResult) {
+      if (err) {
+        return console.error(err);
+      }
+      if (authResult) {
+        webAuth.client.userInfo(authResult.accessToken, function(err, profile) {
+          var result = { err: null, ok: null };
+          var token = authResult.accessToken;
+          if (err) {
+            result.err = err.details;
+            // Ensure that optional fields are on the object
+            result.err.name = result.err.name ? result.err.name : null;
+            result.err.code = result.err.code ? result.err.code : null;
+            result.err.statusCode = result.err.statusCode ? result.err.statusCode : null;
+          }
+          if (authResult) {
+            result.ok = { profile: profile, token: token };
+            localStorage.setItem('profile', JSON.stringify(profile));
+            localStorage.setItem('token', token);
+          }
+          elmApp.ports.auth0authResult.send(result);
+        });
+        window.location.hash = '';
+      }
+    });
+  </script>
+</html>
